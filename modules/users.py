@@ -31,18 +31,17 @@ def create_user(
     name = name.strip()
     phone = phone.strip()
 
-
     if not name or not phone:
         raise ValueError("Todos los campos son obligatorios.")
 
     users_df = get_all_users()
 
-    existing_user = users_df[
-        (users_df["Nombre"].astype(str).str.lower() == name.lower())
+    existing_phone = users_df[
+        users_df["Telefono"].astype(str) == phone
     ]
 
-    if not existing_user.empty:
-        raise ValueError("Este usuario ya está registrado.")
+    if not existing_phone.empty:
+        raise ValueError("Este teléfono ya está registrado.")
 
     new_user = {
         "ID": get_next_id(SHEET_NAME),
@@ -56,7 +55,6 @@ def create_user(
     )
 
     save_sheet(SHEET_NAME, users_df)
-
 
 def update_user(
     user_id: int,
@@ -74,26 +72,55 @@ def update_user(
 
     users_df = get_all_users()
 
-    if user_id not in users_df["ID"].values:
+    if user_id not in users_df["ID"].astype(int).values:
         raise ValueError("Usuario no encontrado.")
 
+    existing_phone = users_df[
+        (users_df["Telefono"].astype(str) == phone)
+        &
+        (users_df["ID"].astype(int) != int(user_id))
+    ]
+
+    if not existing_phone.empty:
+        raise ValueError("Este teléfono ya está registrado.")
+
     users_df.loc[
-        users_df["ID"] == user_id,
+        users_df["ID"].astype(int) == int(user_id),
         ["Nombre", "Telefono"]
     ] = [name, phone]
 
     save_sheet(SHEET_NAME, users_df)
 
-
 def delete_user(user_id: int) -> None:
     """
-    Deletes a user by ID.
+    Deletes a user by ID only if the user has no active loans.
     """
     users_df = get_all_users()
 
-    if user_id not in users_df["ID"].values:
+    user_id = int(user_id)
+
+    if user_id not in users_df["ID"].astype(int).values:
         raise ValueError("Usuario no encontrado.")
 
-    users_df = users_df[users_df["ID"] != user_id]
+    loans_df = read_sheet("Prestamos")
+
+    if not loans_df.empty:
+        loans_df["Usuario_ID"] = loans_df["Usuario_ID"].astype(int)
+        loans_df["Estado"] = loans_df["Estado"].astype(str)
+
+        active_loans = loans_df[
+            (loans_df["Usuario_ID"] == user_id)
+            &
+            (loans_df["Estado"].str.lower() == "activo")
+        ]
+
+        if not active_loans.empty:
+            raise ValueError(
+                "No se puede eliminar un usuario con préstamos activos."
+            )
+
+    users_df = users_df[
+        users_df["ID"].astype(int) != user_id
+    ]
 
     save_sheet(SHEET_NAME, users_df)

@@ -1,16 +1,14 @@
+import pandas as pd
 import streamlit as st
 from datetime import date
+import plotly.express as px
+from io import BytesIO
 
 from modules.books import create_book, get_all_books, update_book, delete_book
 from modules.users import create_user, get_all_users, update_user, delete_user
 from modules.loans import create_loan, get_all_loans, get_active_loans
 from modules.returns import create_return, get_all_returns
-from services.dashboard_service import (
-    get_dashboard_metrics,
-    get_loans_report,
-    get_overdue_loans,
-    get_returns_report,
-)
+from services.dashboard_service import (get_dashboard_metrics, get_loans_report, get_overdue_loans, get_returns_report)
 from services.excel_service import initialize_database
 
 
@@ -23,7 +21,33 @@ initialize_database()
 
 st.title("Sistema de Gestión de Biblioteca")
 
+if "success_message" in st.session_state:
+    st.success(
+        st.session_state["success_message"]
+    )
+    del st.session_state["success_message"]
+
 def show_dataframe(df):
+    st.dataframe(
+        df,
+        width="stretch",
+        hide_index=True
+    )
+
+def convert_df_to_excel(df):
+    output = BytesIO()
+
+    with pd.ExcelWriter(
+        output,
+        engine="openpyxl"
+    ) as writer:
+        df.to_excel(
+            writer,
+            index=False,
+            sheet_name="Informe"
+        )
+
+    return output.getvalue()
     st.dataframe(
         df,
         width="stretch",
@@ -33,15 +57,15 @@ def show_dataframe(df):
 menu = st.sidebar.selectbox(
     "Menú",
     [
-        "Libros",
-        "Usuarios",
-        "Préstamos",
-        "Devoluciones",
-        "Informes",
+        "📚 Libros",
+        "👤 Usuarios",
+        "📖 Préstamos",
+        "📦 Devoluciones",
+        "📊 Informes",
     ]
 )
 
-if menu == "Libros":
+if menu == "📚 Libros":
     st.header("Gestión de Libros")
 
     with st.form("book_form", clear_on_submit=True):
@@ -77,6 +101,7 @@ if menu == "Libros":
                         publisher=publisher,
                         total_quantity=int(total_quantity),
                     )
+                    st.session_state["success_message"] = "Libro registrado correctamente."
                     st.rerun()
 
                 except ValueError as error:
@@ -92,6 +117,11 @@ if menu == "Libros":
     st.subheader("Libros registrados")
 
     books_df = get_all_books()
+
+    if not books_df.empty:
+        books_df = books_df.sort_values(
+            by="Codigo"
+        )
 
     if search_term:
         search_term = search_term.lower()
@@ -219,6 +249,8 @@ if menu == "Libros":
                         total_quantity=int(updated_total_quantity),
                     )
 
+                    st.session_state["success_message"] = "Libro actualizado correctamente."
+                    
                     st.session_state["book_action"] = None
                     st.session_state["selected_book_id"] = None
                     st.rerun()
@@ -251,6 +283,8 @@ if menu == "Libros":
                 try:
                     delete_book(selected_book_id)
 
+                    st.session_state["success_message"] = "Libro eliminado correctamente."
+                    
                     st.session_state["book_action"] = None
                     st.session_state["selected_book_id"] = None
                     st.rerun()
@@ -258,7 +292,7 @@ if menu == "Libros":
                 except ValueError as error:
                     st.error(str(error))
 
-elif menu == "Usuarios":
+elif menu == "👤 Usuarios":
     st.header("Gestión de Usuarios")
 
     with st.form("user_form", clear_on_submit=True):
@@ -278,6 +312,9 @@ elif menu == "Usuarios":
                         name=name,
                         phone=phone
                     )
+                    st.session_state["success_message"] = (
+                         "Usuario registrado correctamente."
+                    )
                     st.rerun()
 
                 except ValueError as error:
@@ -293,6 +330,11 @@ elif menu == "Usuarios":
     st.subheader("Usuarios registrados")
 
     users_df = get_all_users()
+
+    if not users_df.empty:
+        users_df = users_df.sort_values(
+            by="Nombre"
+        )
 
     if search_user:
         search_user = search_user.lower()
@@ -389,6 +431,10 @@ elif menu == "Usuarios":
                         phone=updated_phone,
                     )
 
+                    st.session_state["success_message"] = (
+                        "Usuario actualizado correctamente."
+                    )
+
                     st.session_state["user_action"] = None
                     st.session_state["selected_user_id"] = None
                     st.rerun()
@@ -421,6 +467,10 @@ elif menu == "Usuarios":
                 try:
                     delete_user(selected_user_id)
 
+                    st.session_state["success_message"] = (
+                        "Usuario eliminado correctamente."
+                    )
+
                     st.session_state["user_action"] = None
                     st.session_state["selected_user_id"] = None
                     st.rerun()
@@ -428,7 +478,7 @@ elif menu == "Usuarios":
                 except ValueError as error:
                     st.error(str(error))
 
-elif menu == "Préstamos":
+elif menu == "📖 Préstamos":
     st.header("Gestión de Préstamos")
 
     users_df = get_all_users()
@@ -445,9 +495,9 @@ elif menu == "Préstamos":
             st.subheader("Registrar nuevo préstamo")
 
             user_options = {
-                row["Nombre"]: int(row["ID"])
+                f'{row["Nombre"]} - {row["Telefono"]}': int(row["ID"])
                 for _, row in users_df.iterrows()
-            }
+                }
 
             selected_user = st.selectbox(
                 "Usuario",
@@ -492,6 +542,11 @@ elif menu == "Préstamos":
                     elif selected_book is None:
                         st.error("Debe seleccionar un libro.")
 
+                    elif expected_return_date <= loan_date:
+                        st.error(
+                            "La fecha prevista de devolución debe ser posterior a la fecha de préstamo."
+                        )
+
                     else:
                         try:
                             create_loan(
@@ -499,6 +554,10 @@ elif menu == "Préstamos":
                                 book_id=book_options[selected_book],
                                 loan_date=str(loan_date),
                                 expected_return_date=str(expected_return_date),
+                            )
+
+                            st.session_state["success_message"] = (
+                                 "Préstamo registrado correctamente."
                             )
 
                             st.rerun()
@@ -516,6 +575,12 @@ elif menu == "Préstamos":
     st.subheader("Préstamos registrados")
 
     loans_report_df = get_loans_report()
+
+    if not loans_report_df.empty:
+        loans_report_df = loans_report_df.sort_values(
+            by="Fecha_Prestamo",
+            ascending=False
+        )
 
     if search_loan:
         search_loan = search_loan.lower()
@@ -581,7 +646,7 @@ elif menu == "Préstamos":
             st.write(f'**Fecha prevista:** {selected_loan["Fecha_Prevista_Devolucion"]}')
             st.write(f'**Estado:** {selected_loan["Estado"]}')
 
-elif menu == "Devoluciones":
+elif menu == "📦 Devoluciones":
     st.header("Gestión de Devoluciones")
 
     active_loans_df = get_active_loans()
@@ -616,17 +681,30 @@ elif menu == "Devoluciones":
                 value=date.today()
             )
 
+            confirm_return = st.checkbox(
+                "Confirmo que deseo registrar esta devolución."
+            )
+
             submitted = st.form_submit_button("Registrar devolución")
 
             if submitted:
                 if selected_loan is None:
                     st.error("Debe seleccionar un préstamo activo.")
+
+                elif not confirm_return:
+                    st.error("Debe confirmar antes de registrar la devolución.")
+
                 else:
                     try:
                         create_return(
                             loan_id=loan_options[selected_loan],
                             return_date=str(return_date),
                         )
+
+                        st.session_state["success_message"] = (
+                            "Devolución registrada correctamente."
+                        )
+
                         st.rerun()
 
                     except ValueError as error:
@@ -642,6 +720,12 @@ elif menu == "Devoluciones":
     st.subheader("Devoluciones registradas")
 
     returns_report_df = get_returns_report()
+
+    if not returns_report_df.empty:
+        returns_report_df = returns_report_df.sort_values(
+            by="Fecha_Devolucion",
+            ascending=False
+        )
 
     if search_return:
         search_return = search_return.lower()
@@ -702,7 +786,7 @@ elif menu == "Devoluciones":
             st.write(f'**Fecha devolución:** {selected_return["Fecha_Devolucion"]}')
             st.write(f'**Días atraso:** {selected_return["Dias_Atraso"]}')
 
-elif menu == "Informes":
+elif menu == "📊 Informes":
     st.header("Informes")
 
     metrics = get_dashboard_metrics()
@@ -719,14 +803,72 @@ elif menu == "Informes":
 
     st.divider()
 
-    st.subheader("Préstamos vencidos")
+    st.subheader("Estado de préstamos")
+
+    loans_chart_df = get_loans_report()
+
+    if loans_chart_df.empty:
+        st.info("No hay datos suficientes para generar el gráfico.")
+    else:
+        status_chart = (
+            loans_chart_df.groupby("Estado")
+            .size()
+            .reset_index(name="Cantidad")
+        )
+
+        fig = px.pie(
+            status_chart,
+            names="Estado",
+            values="Cantidad",
+            title="Distribución de préstamos"
+        )
+
+        st.plotly_chart(
+            fig,
+            width="stretch"
+        )
+
+    st.divider()
+
+    st.error("🔴 Préstamos vencidos")
 
     overdue_df = get_overdue_loans()
 
     if overdue_df.empty:
         st.info("No hay préstamos vencidos.")
     else:
-        show_dataframe(overdue_df)
+        overdue_display = overdue_df.rename(
+            columns={
+                "Nombre": "Usuario",
+                "Codigo": "Código",
+                "Titulo": "Libro",
+                "Fecha_Prestamo": "Fecha préstamo",
+                "Fecha_Prevista_Devolucion": "Fecha prevista",
+                "Estado": "Estado",
+            }
+        )
+
+        overdue_display = overdue_display[
+            [
+                "Usuario",
+                "Código",
+                "Libro",
+                "Fecha préstamo",
+                "Fecha prevista",
+                "Estado",
+            ]
+        ]
+
+        show_dataframe(overdue_display)
+
+        excel_file = convert_df_to_excel(overdue_display)
+
+        st.download_button(
+            label="Descargar préstamos vencidos",
+            data=excel_file,
+            file_name="prestamos_vencidos.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
     st.divider()
 
@@ -737,25 +879,176 @@ elif menu == "Informes":
     )
 
     with report_tabs[0]:
+        search_books_report = st.text_input(
+            "Buscar libro",
+            key="search_books_report"
+        )
+
         books_df = get_all_books()
+
+        if search_books_report:
+            search_books_report = search_books_report.lower()
+
+            books_df = books_df[
+                books_df["Codigo"].astype(str).str.lower().str.contains(search_books_report)
+                |
+                books_df["Titulo"].astype(str).str.lower().str.contains(search_books_report)
+                |
+                books_df["Autor"].astype(str).str.lower().str.contains(search_books_report)
+                |
+                books_df["Editora"].astype(str).str.lower().str.contains(search_books_report)
+            ]
 
         if books_df.empty:
             st.info("No hay libros registrados.")
         else:
-            show_dataframe(books_df)
+            unavailable_books = len(
+                books_df[books_df["Cantidad_Disponible"] == 0]
+            )
+
+            st.warning(
+                f"Libros sin disponibilidad: {unavailable_books}"
+            )
+
+            books_display = books_df.rename(
+                columns={
+                    "Codigo": "Código",
+                    "Titulo": "Título",
+                    "Cantidad_Total": "Total",
+                    "Cantidad_Disponible": "Disponibles",
+                    "Observaciones": "Etiquetas",
+                }
+            )
+
+            books_display = books_display[
+                [
+                    "Código",
+                    "Título",
+                    "Autor",
+                    "Editora",
+                    "Total",
+                    "Disponibles",
+                    "Etiquetas",
+                ]
+            ]
+
+            show_dataframe(books_display)
+
+            excel_file = convert_df_to_excel(books_display)
+
+            st.download_button(
+                label="Descargar informe de libros",
+                data=excel_file,
+                file_name="informe_libros.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 
     with report_tabs[1]:
+        search_loans_report = st.text_input(
+            "Buscar préstamo",
+            key="search_loans_report"
+        )
+
         loans_report_df = get_loans_report()
+
+        if search_loans_report:
+            search_loans_report = search_loans_report.lower()
+
+            loans_report_df = loans_report_df[
+                loans_report_df["Nombre"].astype(str).str.lower().str.contains(search_loans_report)
+                |
+                loans_report_df["Codigo"].astype(str).str.lower().str.contains(search_loans_report)
+                |
+                loans_report_df["Titulo"].astype(str).str.lower().str.contains(search_loans_report)
+                |
+                loans_report_df["Estado"].astype(str).str.lower().str.contains(search_loans_report)
+            ]
 
         if loans_report_df.empty:
             st.info("No hay préstamos registrados.")
         else:
-            show_dataframe(loans_report_df)
+            loans_display = loans_report_df.rename(
+                columns={
+                    "Nombre": "Usuario",
+                    "Codigo": "Código",
+                    "Titulo": "Libro",
+                    "Fecha_Prestamo": "Fecha préstamo",
+                    "Fecha_Prevista_Devolucion": "Fecha prevista",
+                    "Estado": "Estado",
+                }
+            )
+
+            loans_display = loans_display[
+                [
+                    "Usuario",
+                    "Código",
+                    "Libro",
+                    "Fecha préstamo",
+                    "Fecha prevista",
+                    "Estado",
+                ]
+            ]
+
+            show_dataframe(loans_display)
+
+            excel_file = convert_df_to_excel(loans_display)
+
+            st.download_button(
+                label="Descargar informe de préstamos",
+                data=excel_file,
+                file_name="informe_prestamos.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 
     with report_tabs[2]:
+        search_returns_report = st.text_input(
+            "Buscar devolución",
+            key="search_returns_report"
+        )
+
         returns_report_df = get_returns_report()
+
+        if search_returns_report:
+            search_returns_report = search_returns_report.lower()
+
+            returns_report_df = returns_report_df[
+                returns_report_df["Nombre"].astype(str).str.lower().str.contains(search_returns_report)
+                |
+                returns_report_df["Codigo"].astype(str).str.lower().str.contains(search_returns_report)
+                |
+                returns_report_df["Titulo"].astype(str).str.lower().str.contains(search_returns_report)
+            ]
 
         if returns_report_df.empty:
             st.info("No hay devoluciones registradas.")
         else:
-            show_dataframe(returns_report_df)
+            returns_display = returns_report_df.rename(
+                columns={
+                    "Nombre": "Usuario",
+                    "Codigo": "Código",
+                    "Titulo": "Libro",
+                    "Fecha_Devolucion": "Fecha devolución",
+                    "Dias_Atraso": "Días atraso",
+                }
+            )
+
+            returns_display = returns_display[
+                [
+                    "Usuario",
+                    "Código",
+                    "Libro",
+                    "Fecha devolución",
+                    "Días atraso",
+                ]
+            ]
+
+            show_dataframe(returns_display)
+
+            excel_file = convert_df_to_excel(returns_display)
+
+            st.download_button(
+                label="Descargar informe de devoluciones",
+                data=excel_file,
+                file_name="informe_devoluciones.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
