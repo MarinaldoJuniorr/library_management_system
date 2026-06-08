@@ -50,6 +50,7 @@ This project was developed to manage books, users, loans, and returns in small l
 - Returns report
 - Loan status chart
 - Search and filtering tools
+- Export reports to Excel
 
 ---
 
@@ -79,7 +80,6 @@ Current version: v1.0
 
 - SQLite integration
 - Advanced analytics
-- Report export
 - Portfolio version (V2)
 
 ---
