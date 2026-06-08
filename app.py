@@ -445,13 +445,14 @@ elif menu == "Préstamos":
             st.subheader("Registrar nuevo préstamo")
 
             user_options = {
-                f'{row["ID"]} - {row["Nombre"]}': int(row["ID"])
+                row["Nombre"]: int(row["ID"])
                 for _, row in users_df.iterrows()
             }
 
             selected_user = st.selectbox(
-                "Seleccione un usuario",
-                list(user_options.keys())
+                "Usuario",
+                options=[None] + list(user_options.keys()),
+                format_func=lambda x: "Seleccione un usuario..." if x is None else x
             )
 
             available_books_df = books_df[
@@ -463,13 +464,14 @@ elif menu == "Préstamos":
                 submitted = False
             else:
                 book_options = {
-                    f'{row["ID"]} - {row["Titulo"]}': int(row["ID"])
+                    f'{row["Codigo"]} - {row["Titulo"]}': int(row["ID"])
                     for _, row in available_books_df.iterrows()
                 }
 
                 selected_book = st.selectbox(
-                    "Seleccione un libro",
-                    list(book_options.keys())
+                    "Libro",
+                    options=[None] + list(book_options.keys()),
+                    format_func=lambda x: "Seleccione un libro..." if x is None else x
                 )
 
                 loan_date = st.date_input(
@@ -484,28 +486,100 @@ elif menu == "Préstamos":
                 submitted = st.form_submit_button("Registrar préstamo")
 
                 if submitted:
-                    try:
-                        create_loan(
-                            user_id=user_options[selected_user],
-                            book_id=book_options[selected_book],
-                            loan_date=str(loan_date),
-                            expected_return_date=str(expected_return_date),
-                        )
+                    if selected_user is None:
+                        st.error("Debe seleccionar un usuario.")
 
-                        st.rerun()
+                    elif selected_book is None:
+                        st.error("Debe seleccionar un libro.")
 
-                    except ValueError as error:
-                        st.error(str(error))
+                    else:
+                        try:
+                            create_loan(
+                                user_id=user_options[selected_user],
+                                book_id=book_options[selected_book],
+                                loan_date=str(loan_date),
+                                expected_return_date=str(expected_return_date),
+                            )
+
+                            st.rerun()
+
+                        except ValueError as error:
+                            st.error(str(error))
 
     st.divider()
+    st.subheader("Buscar préstamo")
+
+    search_loan = st.text_input(
+        "Buscar por usuario, código, título o estado"
+    )
+
     st.subheader("Préstamos registrados")
 
-    loans_df = get_all_loans()
+    loans_report_df = get_loans_report()
 
-    if loans_df.empty:
+    if search_loan:
+        search_loan = search_loan.lower()
+
+        loans_report_df = loans_report_df[
+            loans_report_df["Nombre"].astype(str).str.lower().str.contains(search_loan)
+            |
+            loans_report_df["Codigo"].astype(str).str.lower().str.contains(search_loan)
+            |
+            loans_report_df["Titulo"].astype(str).str.lower().str.contains(search_loan)
+            |
+            loans_report_df["Estado"].astype(str).str.lower().str.contains(search_loan)
+        ]
+
+    if loans_report_df.empty:
         st.info("No hay préstamos registrados.")
     else:
-        show_dataframe(loans_df)
+        loans_display = loans_report_df.rename(
+            columns={
+                "Nombre": "Usuario",
+                "Codigo": "Código",
+                "Titulo": "Libro",
+                "Fecha_Prestamo": "Fecha préstamo",
+                "Fecha_Prevista_Devolucion": "Fecha prevista",
+                "Estado": "Estado",
+            }
+        )
+
+        loans_display = loans_display[
+            [
+                "Usuario",
+                "Código",
+                "Libro",
+                "Fecha préstamo",
+                "Fecha prevista",
+                "Estado",
+            ]
+        ]
+
+        selected_event = st.dataframe(
+            loans_display,
+            width="stretch",
+            hide_index=True,
+            on_select="rerun",
+            selection_mode="single-row"
+        )
+
+        selected_rows = selected_event.selection.rows
+
+        if selected_rows:
+            selected_index = selected_rows[0]
+            selected_loan = loans_report_df.iloc[selected_index]
+
+            st.info(
+                f'Préstamo seleccionado: {selected_loan["Nombre"]} - '
+                f'{selected_loan["Codigo"]} - {selected_loan["Titulo"]}'
+            )
+
+            st.write(f'**Usuario:** {selected_loan["Nombre"]}')
+            st.write(f'**Código:** {selected_loan["Codigo"]}')
+            st.write(f'**Libro:** {selected_loan["Titulo"]}')
+            st.write(f'**Fecha préstamo:** {selected_loan["Fecha_Prestamo"]}')
+            st.write(f'**Fecha prevista:** {selected_loan["Fecha_Prevista_Devolucion"]}')
+            st.write(f'**Estado:** {selected_loan["Estado"]}')
 
 elif menu == "Devoluciones":
     st.header("Gestión de Devoluciones")
@@ -525,15 +599,16 @@ elif menu == "Devoluciones":
 
             loan_options = {
                 (
-                    f'{row["ID"]} - {row["Nombre"]} - {row["Titulo"]} '
+                    f'{row["Nombre"]} - {row["Codigo"]} - {row["Titulo"]} '
                     f'({row["Fecha_Prevista_Devolucion"]})'
                 ): int(row["ID"])
                 for _, row in active_report_df.iterrows()
             }
 
             selected_loan = st.selectbox(
-                "Seleccione un préstamo activo",
-                list(loan_options.keys())
+                "Préstamo activo",
+                options=[None] + list(loan_options.keys()),
+                format_func=lambda x: "Seleccione un préstamo..." if x is None else x
             )
 
             return_date = st.date_input(
@@ -544,25 +619,88 @@ elif menu == "Devoluciones":
             submitted = st.form_submit_button("Registrar devolución")
 
             if submitted:
-                try:
-                    create_return(
-                        loan_id=loan_options[selected_loan],
-                        return_date=str(return_date),
-                    )
-                    st.rerun()
+                if selected_loan is None:
+                    st.error("Debe seleccionar un préstamo activo.")
+                else:
+                    try:
+                        create_return(
+                            loan_id=loan_options[selected_loan],
+                            return_date=str(return_date),
+                        )
+                        st.rerun()
 
-                except ValueError as error:
-                    st.error(str(error))
+                    except ValueError as error:
+                        st.error(str(error))
 
     st.divider()
+    st.subheader("Buscar devolución")
+
+    search_return = st.text_input(
+        "Buscar por usuario, código o título"
+    )
+
     st.subheader("Devoluciones registradas")
 
-    returns_df = get_all_returns()
+    returns_report_df = get_returns_report()
 
-    if returns_df.empty:
+    if search_return:
+        search_return = search_return.lower()
+
+        returns_report_df = returns_report_df[
+            returns_report_df["Nombre"].astype(str).str.lower().str.contains(search_return)
+            |
+            returns_report_df["Codigo"].astype(str).str.lower().str.contains(search_return)
+            |
+            returns_report_df["Titulo"].astype(str).str.lower().str.contains(search_return)
+        ]
+
+    if returns_report_df.empty:
         st.info("No hay devoluciones registradas.")
     else:
-        show_dataframe(returns_df)
+        returns_display = returns_report_df.rename(
+            columns={
+                "Nombre": "Usuario",
+                "Codigo": "Código",
+                "Titulo": "Libro",
+                "Fecha_Devolucion": "Fecha devolución",
+                "Dias_Atraso": "Días atraso",
+            }
+        )
+
+        returns_display = returns_display[
+            [
+                "Usuario",
+                "Código",
+                "Libro",
+                "Fecha devolución",
+                "Días atraso",
+            ]
+        ]
+
+        selected_event = st.dataframe(
+            returns_display,
+            width="stretch",
+            hide_index=True,
+            on_select="rerun",
+            selection_mode="single-row"
+        )
+
+        selected_rows = selected_event.selection.rows
+
+        if selected_rows:
+            selected_index = selected_rows[0]
+            selected_return = returns_report_df.iloc[selected_index]
+
+            st.info(
+                f'Devolución seleccionada: {selected_return["Nombre"]} - '
+                f'{selected_return["Codigo"]} - {selected_return["Titulo"]}'
+            )
+
+            st.write(f'**Usuario:** {selected_return["Nombre"]}')
+            st.write(f'**Código:** {selected_return["Codigo"]}')
+            st.write(f'**Libro:** {selected_return["Titulo"]}')
+            st.write(f'**Fecha devolución:** {selected_return["Fecha_Devolucion"]}')
+            st.write(f'**Días atraso:** {selected_return["Dias_Atraso"]}')
 
 elif menu == "Informes":
     st.header("Informes")

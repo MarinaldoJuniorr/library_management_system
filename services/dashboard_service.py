@@ -63,7 +63,7 @@ def get_loans_report() -> pd.DataFrame:
     )
 
     report_df = report_df.merge(
-        books_df[["ID", "Titulo"]],
+        books_df[["ID", "Codigo", "Titulo"]],
         left_on="Libro_ID",
         right_on="ID",
         how="left",
@@ -74,6 +74,7 @@ def get_loans_report() -> pd.DataFrame:
         [
             "ID",
             "Nombre",
+            "Codigo",
             "Titulo",
             "Fecha_Prestamo",
             "Fecha_Prevista_Devolucion",
@@ -99,7 +100,7 @@ def get_returns_report() -> pd.DataFrame:
     )
 
     report_df = report_df.merge(
-        books_df[["ID", "Titulo"]],
+        books_df[["ID", "Codigo", "Titulo"]],
         left_on="Libro_ID",
         right_on="ID",
         how="left",
@@ -110,6 +111,7 @@ def get_returns_report() -> pd.DataFrame:
         [
             "ID",
             "Nombre",
+            "Codigo",
             "Titulo",
             "Fecha_Devolucion",
             "Dias_Atraso",

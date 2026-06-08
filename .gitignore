@@ -1,12 +1,8 @@
-# Virtual environment
 .venv/
-
-# Python cache
 __pycache__/
 *.pyc
-
-# macOS
 .DS_Store
 
-# Local database
 data/library.xlsx
+TODO_LIST/
+seed_data.py
