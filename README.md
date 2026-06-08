@@ -110,7 +110,28 @@ bash streamlit run app.py
 
 ## Project Structure
 
-text library_management_system/ │ ├── app.py ├── requirements.txt ├── README.md │ ├── modules/ │   ├── books.py │   ├── users.py │   ├── loans.py │   └── returns.py │ ├── services/ │   ├── excel_service.py │   ├── dashboard_service.py │   └── label_service.py │ ├── assets/ ├── reports/ └── data/ 
+```text
+library_management_system/
+│
+├── app.py
+├── requirements.txt
+├── README.md
+│
+├── modules/
+│   ├── books.py
+│   ├── users.py
+│   ├── loans.py
+│   └── returns.py
+│
+├── services/
+│   ├── excel_service.py
+│   ├── dashboard_service.py
+│   └── label_service.py
+│
+├── assets/
+├── reports/
+└── data/
+```
 
 ---
 
